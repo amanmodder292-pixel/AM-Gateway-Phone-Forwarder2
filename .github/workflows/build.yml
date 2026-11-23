@@ -1,0 +1,55 @@
+name: Build APK from ZIP
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Unzip project
+        run: |
+          test -f android-app-for-github.zip || { echo "ERROR: android-app-for-github.zip repo ke root me upload karo"; exit 1; }
+          unzip -q -o android-app-for-github.zip -d project
+          ls -la project
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Keep the same signing key for every build
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: debug-keystore-v1
+
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      - name: Build debug APK
+        working-directory: project
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon --stacktrace assembleDebug
+
+      - name: Rename APK
+        run: cp project/app/build/outputs/apk/debug/app-debug.apk am-sms-forwarder.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: am-sms-forwarder-apk
+          path: am-sms-forwarder.apk
+          if-no-files-found: error
